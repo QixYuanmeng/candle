@@ -11,12 +11,14 @@ pub enum DeviceLocation {
     Metal { gpu_id: usize },
 }
 
-/// Cpu, Cuda, or Metal
+/// Cpu, Cuda, Metal, or CoreX
 #[derive(Debug, Clone)]
 pub enum Device {
     Cpu,
     Cuda(crate::CudaDevice),
     Metal(crate::MetalDevice),
+    #[cfg(feature = "corex")]
+    Corex(crate::CorexDevice),
 }
 
 pub trait NdArray {
@@ -240,6 +242,8 @@ impl Device {
             Self::Cuda(d) => Ok(d),
             Self::Cpu => crate::bail!("expected a cuda device, got cpu"),
             Self::Metal(_) => crate::bail!("expected a cuda device, got Metal"),
+            #[cfg(feature = "corex")]
+            Self::Corex(_) => crate::bail!("expected a cuda device, got corex"),
         }
     }
 
@@ -248,6 +252,18 @@ impl Device {
             Self::Cuda(_) => crate::bail!("expected a metal device, got cuda"),
             Self::Cpu => crate::bail!("expected a metal device, got cpu"),
             Self::Metal(d) => Ok(d),
+            #[cfg(feature = "corex")]
+            Self::Corex(_) => crate::bail!("expected a metal device, got corex"),
+        }
+    }
+
+    #[cfg(feature = "corex")]
+    pub fn as_corex_device(&self) -> Result<&crate::CorexDevice> {
+        match self {
+            Self::Corex(d) => Ok(d),
+            Self::Cpu => crate::bail!("expected a corex device, got cpu"),
+            Self::Cuda(_) => crate::bail!("expected a corex device, got cuda"),
+            Self::Metal(_) => crate::bail!("expected a corex device, got metal"),
         }
     }
 
@@ -259,11 +275,18 @@ impl Device {
         Ok(Self::Metal(crate::MetalDevice::new(ordinal)?))
     }
 
+    #[cfg(feature = "corex")]
+    pub fn new_corex(ordinal: usize) -> Result<Self> {
+        Ok(Self::Corex(crate::CorexDevice::new(ordinal)?))
+    }
+
     pub fn set_seed(&self, seed: u64) -> Result<()> {
         match self {
             Self::Cpu => CpuDevice.set_seed(seed),
             Self::Cuda(c) => c.set_seed(seed),
             Self::Metal(m) => m.set_seed(seed),
+            #[cfg(feature = "corex")]
+            Self::Corex(c) => c.set_seed(seed),
         }
     }
 
@@ -272,6 +295,8 @@ impl Device {
             Self::Cpu => CpuDevice.get_current_seed(),
             Self::Cuda(c) => c.get_current_seed(),
             Self::Metal(m) => m.get_current_seed(),
+            #[cfg(feature = "corex")]
+            Self::Corex(c) => c.get_current_seed(),
         }
     }
 
@@ -280,6 +305,8 @@ impl Device {
             (Self::Cpu, Self::Cpu) => true,
             (Self::Cuda(lhs), Self::Cuda(rhs)) => lhs.same_device(rhs),
             (Self::Metal(lhs), Self::Metal(rhs)) => lhs.same_device(rhs),
+            #[cfg(feature = "corex")]
+            (Self::Corex(lhs), Self::Corex(rhs)) => lhs.same_device(rhs),
             _ => false,
         }
     }
@@ -288,7 +315,9 @@ impl Device {
         match self {
             Self::Cpu => DeviceLocation::Cpu,
             Self::Cuda(device) => device.location(),
-            Device::Metal(device) => device.location(),
+            Self::Metal(device) => device.location(),
+            #[cfg(feature = "corex")]
+            Self::Corex(device) => device.location(),
         }
     }
 
@@ -304,9 +333,16 @@ impl Device {
         matches!(self, Self::Metal(_))
     }
 
+    #[cfg(feature = "corex")]
+    pub fn is_corex(&self) -> bool {
+        matches!(self, Self::Corex(_))
+    }
+
     pub fn supports_bf16(&self) -> bool {
         match self {
             Self::Cuda(_) | Self::Metal(_) => true,
+            #[cfg(feature = "corex")]
+            Self::Corex(_) => true, // CoreX supports BF16
             Self::Cpu => false,
         }
     }
@@ -331,6 +367,15 @@ impl Device {
     pub fn metal_if_available(ordinal: usize) -> Result<Self> {
         if crate::utils::metal_is_available() {
             Self::new_metal(ordinal)
+        } else {
+            Ok(Self::Cpu)
+        }
+    }
+
+    #[cfg(feature = "corex")]
+    pub fn corex_if_available(ordinal: usize) -> Result<Self> {
+        if crate::corex_backend::is_corex_available() {
+            Self::new_corex(ordinal)
         } else {
             Ok(Self::Cpu)
         }
@@ -457,6 +502,11 @@ impl Device {
                 let storage = device.storage_from_slice(data)?;
                 Ok(Storage::Metal(storage))
             }
+            #[cfg(feature = "corex")]
+            Device::Corex(device) => {
+                let storage = device.storage_from_slice(data)?;
+                Ok(Storage::Cuda(storage)) // CorexStorage wraps CudaStorage internally
+            }
         }
     }
 
@@ -472,6 +522,12 @@ impl Device {
                 let storage = array.to_cpu_storage();
                 let storage = device.storage_from_cpu_storage_owned(storage)?;
                 Ok(Storage::Metal(storage))
+            }
+            #[cfg(feature = "corex")]
+            Device::Corex(device) => {
+                let storage = array.to_cpu_storage();
+                let storage = device.storage_from_cpu_storage_owned(storage)?;
+                Ok(Storage::Cuda(storage)) // CorexStorage wraps CudaStorage internally
             }
         }
     }
@@ -489,6 +545,12 @@ impl Device {
                 let storage = device.storage_from_cpu_storage_owned(storage)?;
                 Ok(Storage::Metal(storage))
             }
+            #[cfg(feature = "corex")]
+            Device::Corex(device) => {
+                let storage = S::to_cpu_storage_owned(data);
+                let storage = device.storage_from_cpu_storage_owned(storage)?;
+                Ok(Storage::Cuda(storage)) // CorexStorage wraps CudaStorage internally
+            }
         }
     }
 
@@ -497,6 +559,8 @@ impl Device {
             Self::Cpu => Ok(()),
             Self::Cuda(d) => d.synchronize(),
             Self::Metal(d) => d.synchronize(),
+            #[cfg(feature = "corex")]
+            Self::Corex(d) => d.synchronize(),
         }
     }
 }

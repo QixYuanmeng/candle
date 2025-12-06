@@ -57,6 +57,8 @@ pub mod cpu;
 pub mod cpu_backend;
 #[cfg(feature = "cuda")]
 pub mod cuda_backend;
+#[cfg(feature = "corex")]
+pub mod corex_backend;
 mod custom_op;
 mod device;
 pub mod display;
@@ -113,6 +115,9 @@ pub use cuda_backend as cuda;
 pub use dummy_cuda_backend as cuda;
 
 pub use cuda::{CudaDevice, CudaStorage};
+
+#[cfg(feature = "corex")]
+pub use corex_backend::{CorexDevice, CorexStorage, initialize_corex, is_corex_available};
 
 #[cfg(feature = "metal")]
 pub use metal_backend::{MetalDevice, MetalError, MetalStorage};
