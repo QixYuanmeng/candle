@@ -43,7 +43,6 @@ ug-metal = { workspace = true, optional = true }
 anyhow = { workspace = true }
 clap = { workspace = true }
 criterion = { workspace = true }
-thiserror = { workspace = true }
 
 [features]
 default = []
@@ -58,7 +57,6 @@ metal = [
     "dep:candle-metal-kernels",
     "dep:ug-metal",
 ]
-corex = ["cudarc", "dep:candle-kernels", "dep:ug-cuda", "float8/cuda"]
 
 [[bench]]
 name = "bench_main"
@@ -71,7 +69,3 @@ required-features = ["metal"]
 [[example]]
 name = "cuda_basics"
 required-features = ["cuda"]
-
-[[example]]
-name = "corex_basics"
-required-features = ["corex"]
